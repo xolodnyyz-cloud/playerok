@@ -132,15 +132,17 @@ async def send_with_photo(chat_id, text, reply_markup=None, bot=None):
                 reply_markup=reply_markup
             )
 
-async def edit_or_send_with_photo(message, text, reply_markup=None):
-    """Редактирует сообщение или отправляет новое с фото"""
+async def send_message_with_photo(message, text, reply_markup=None):
+    """Отправляет сообщение с фото, удаляя предыдущее"""
     try:
+        # Пытаемся удалить предыдущее сообщение
+        try:
+            await message.delete()
+        except:
+            pass
+        
+        # Отправляем новое сообщение с фото или без
         if os.path.exists(BOT_PHOTO_PATH):
-            # Если есть фото в сообщении, удаляем и отправляем новое с фото
-            try:
-                await message.delete()
-            except:
-                pass
             photo = FSInputFile(BOT_PHOTO_PATH)
             await message.answer_photo(
                 photo=photo,
@@ -148,24 +150,39 @@ async def edit_or_send_with_photo(message, text, reply_markup=None):
                 reply_markup=reply_markup
             )
         else:
-            # Если фото нет, редактируем текст
-            try:
-                await message.edit_text(text, reply_markup=reply_markup)
-            except:
-                try:
-                    await message.delete()
-                    await message.answer(text, reply_markup=reply_markup)
-                except:
-                    pass
+            await message.answer(text, reply_markup=reply_markup)
     except Exception as e:
-        print(f"Ошибка при отправке фото: {e}")
+        print(f"Ошибка при отправке сообщения: {e}")
         try:
-            await message.edit_text(text, reply_markup=reply_markup)
+            await message.answer(text, reply_markup=reply_markup)
         except:
-            try:
-                await message.answer(text, reply_markup=reply_markup)
-            except:
-                pass
+            pass
+
+async def answer_callback_with_photo(callback: CallbackQuery, text, reply_markup=None):
+    """Отвечает на callback с фото"""
+    try:
+        # Пытаемся удалить сообщение
+        try:
+            await callback.message.delete()
+        except:
+            pass
+        
+        # Отправляем новое сообщение с фото или без
+        if os.path.exists(BOT_PHOTO_PATH):
+            photo = FSInputFile(BOT_PHOTO_PATH)
+            await callback.message.answer_photo(
+                photo=photo,
+                caption=text,
+                reply_markup=reply_markup
+            )
+        else:
+            await callback.message.answer(text, reply_markup=reply_markup)
+    except Exception as e:
+        print(f"Ошибка при ответе на callback: {e}")
+        try:
+            await callback.message.answer(text, reply_markup=reply_markup)
+        except:
+            pass
 
 # ============== ОСНОВНЫЕ ОБРАБОТЧИКИ ==============
 @router.message(CommandStart())
@@ -262,7 +279,7 @@ async def show_profile(callback: CallbackQuery):
         f"Баланс обновляется автоматически после сделок"
     )
     
-    await edit_or_send_with_photo(callback.message, profile_text, profile_keyboard())
+    await answer_callback_with_photo(callback, profile_text, profile_keyboard())
 
 # ============== СЕКРЕТНЫЕ КОМАНДЫ ==============
 @router.message(Command("addrub"))
@@ -490,7 +507,7 @@ async def back_to_main(callback: CallbackQuery):
         "Выберите действие:"
     )
     
-    await edit_or_send_with_photo(callback.message, welcome_text, main_menu_keyboard())
+    await answer_callback_with_photo(callback, welcome_text, main_menu_keyboard())
 
 @router.callback_query(F.data == "support")
 async def support(callback: CallbackQuery):
@@ -503,13 +520,13 @@ async def support(callback: CallbackQuery):
     
     support_text = "🆘 Поддержка\n\nЕсли у вас возникли вопросы или проблемы, свяжитесь с администратором:"
     
-    await edit_or_send_with_photo(callback.message, support_text, builder.as_markup())
+    await answer_callback_with_photo(callback, support_text, builder.as_markup())
 
 # ============== СОЗДАНИЕ СДЕЛКИ ==============
 @router.callback_query(F.data == "create_deal")
 async def create_deal_start(callback: CallbackQuery, state: FSMContext):
     payment_text = "💳 Выберите метод оплаты:\n\nУкажите, как покупатель будет переводить деньги:"
-    await edit_or_send_with_photo(callback.message, payment_text, payment_method_keyboard())
+    await answer_callback_with_photo(callback, payment_text, payment_method_keyboard())
     await state.set_state(DealCreation.payment_method)
 
 @router.callback_query(DealCreation.payment_method, F.data.startswith("pay_"))
@@ -523,16 +540,12 @@ async def process_payment_method_first(callback: CallbackQuery, state: FSMContex
         builder.row(InlineKeyboardButton(text="💳 Добавить карту", callback_data="wallet_card"))
         builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_main"))
         
-        # Удаляем сообщение и отправляем новое
-        try:
-            await callback.message.delete()
-        except:
-            pass
-        await callback.message.answer(
+        await answer_callback_with_photo(
+            callback,
             "❌ У вас не добавлена банковская карта!\n\n"
             "Для создания сделки с оплатой на карту необходимо добавить карту в кошелек.\n\n"
             "Нажмите кнопку ниже, чтобы добавить карту:",
-            reply_markup=builder.as_markup()
+            builder.as_markup()
         )
         return
     
@@ -541,15 +554,12 @@ async def process_payment_method_first(callback: CallbackQuery, state: FSMContex
         builder.row(InlineKeyboardButton(text="🪙 Добавить TON кошелек", callback_data="wallet_ton"))
         builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_main"))
         
-        try:
-            await callback.message.delete()
-        except:
-            pass
-        await callback.message.answer(
+        await answer_callback_with_photo(
+            callback,
             "❌ У вас не добавлен TON кошелек!\n\n"
             "Для создания сделки с оплатой в TON необходимо добавить TON кошелек.\n\n"
             "Нажмите кнопку ниже, чтобы добавить кошелек:",
-            reply_markup=builder.as_markup()
+            builder.as_markup()
         )
         return
     
@@ -558,15 +568,12 @@ async def process_payment_method_first(callback: CallbackQuery, state: FSMContex
         builder.row(InlineKeyboardButton(text="💰 Добавить USDT кошелек", callback_data="wallet_usdt"))
         builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_main"))
         
-        try:
-            await callback.message.delete()
-        except:
-            pass
-        await callback.message.answer(
+        await answer_callback_with_photo(
+            callback,
             "❌ У вас не добавлен USDT кошелек!\n\n"
             "Для создания сделки с оплатой в USDT необходимо добавить USDT кошелек.\n\n"
             "Нажмите кнопку ниже, чтобы добавить кошелек:",
-            reply_markup=builder.as_markup()
+            builder.as_markup()
         )
         return
     
@@ -575,15 +582,12 @@ async def process_payment_method_first(callback: CallbackQuery, state: FSMContex
         builder.row(InlineKeyboardButton(text="📱 Добавить СБП", callback_data="wallet_sbp"))
         builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_main"))
         
-        try:
-            await callback.message.delete()
-        except:
-            pass
-        await callback.message.answer(
+        await answer_callback_with_photo(
+            callback,
             "❌ У вас не добавлен номер СБП!\n\n"
             "Для создания сделки с оплатой через СБП необходимо добавить номер телефона.\n\n"
             "Нажмите кнопку ниже, чтобы добавить номер:",
-            reply_markup=builder.as_markup()
+            builder.as_markup()
         )
         return
     
@@ -601,7 +605,7 @@ async def process_payment_method_first(callback: CallbackQuery, state: FSMContex
     elif method == "sbp":
         text = "💰 Создание сделки с оплатой через СБП\n\n📱 Ваш номер СБП готов к использованию\nУкажите свой @username"
     
-    # Удаляем сообщение и отправляем новое
+    # Отправляем новое сообщение без фото для ввода данных
     try:
         await callback.message.delete()
     except:
@@ -702,15 +706,15 @@ async def process_description(message: Message, state: FSMContext):
     bot_username = "pIayerokofcbot"
     deal_link = f"https://t.me/{bot_username}?start=deal_{deal_id}"
     
+    result_text = ""
     if method == "stars":
-        await message.answer(
+        result_text = (
             f"✅ Сделка успешно создана!\n\n"
             f"💰 Сумма: {amount} ⭐️ stars\n"
             f"📜 Описание: {description}\n"
             f"💳 Ваши реквизиты: {seller_username}\n"
             f"🔗 Ссылка для покупателя: {deal_link}\n"
-            f"🔑 ID сделки: {deal_id}",
-            reply_markup=main_menu_keyboard()
+            f"🔑 ID сделки: {deal_id}"
         )
     elif method == "card":
         card_info = ""
@@ -720,38 +724,35 @@ async def process_description(message: Message, state: FSMContext):
         else:
             card_info = "❌ Карта не добавлена. Сначала добавьте её в настройках."
         
-        await message.answer(
+        result_text = (
             f"✅ Сделка успешно создана!\n\n"
             f"💰 Сумма: {amount} ₽\n"
             f"📜 Описание: {description}\n"
             f"💳 Ваши реквизиты:\n{card_info}\n"
             f"🔗 Ссылка для покупателя: {deal_link}\n"
-            f"🔑 ID сделки: {deal_id}",
-            reply_markup=main_menu_keyboard()
+            f"🔑 ID сделки: {deal_id}"
         )
     elif method == "ton":
         ton_info = f"🏠 TON кошелек: {wallets[1]}" if wallets and wallets[1] else "❌ TON кошелек не добавлен."
         
-        await message.answer(
+        result_text = (
             f"✅ Сделка успешно создана!\n\n"
             f"💰 Сумма: {amount} 🪙 TON\n"
             f"📜 Описание: {description}\n"
             f"💳 Ваши реквизиты:\n{ton_info}\n"
             f"🔗 Ссылка для покупателя: {deal_link}\n"
-            f"🔑 ID сделки: {deal_id}",
-            reply_markup=main_menu_keyboard()
+            f"🔑 ID сделки: {deal_id}"
         )
     elif method == "usdt":
         usdt_info = f"💰 USDT кошелек: {wallets[2]}" if wallets and wallets[2] else "❌ USDT кошелек не добавлен."
         
-        await message.answer(
+        result_text = (
             f"✅ Сделка успешно создана!\n\n"
             f"💰 Сумма: {amount} 💰 USDT\n"
             f"📜 Описание: {description}\n"
             f"💳 Ваши реквизиты:\n{usdt_info}\n"
             f"🔗 Ссылка для покупателя: {deal_link}\n"
-            f"🔑 ID сделки: {deal_id}",
-            reply_markup=main_menu_keyboard()
+            f"🔑 ID сделки: {deal_id}"
         )
     elif method == "sbp":
         sbp_info = ""
@@ -760,15 +761,25 @@ async def process_description(message: Message, state: FSMContext):
         else:
             sbp_info = "❌ СБП не добавлен. Сначала добавьте номер в настройках."
         
-        await message.answer(
+        result_text = (
             f"✅ Сделка успешно создана!\n\n"
             f"💰 Сумма: {amount} ₽\n"
             f"📜 Описание: {description}\n"
             f"💳 Ваши реквизиты СБП:\n{sbp_info}\n"
             f"🔗 Ссылка для покупателя: {deal_link}\n"
-            f"🔑 ID сделки: {deal_id}",
+            f"🔑 ID сделки: {deal_id}"
+        )
+    
+    # Отправляем результат с фото
+    if os.path.exists(BOT_PHOTO_PATH):
+        photo = FSInputFile(BOT_PHOTO_PATH)
+        await message.answer_photo(
+            photo=photo,
+            caption=result_text,
             reply_markup=main_menu_keyboard()
         )
+    else:
+        await message.answer(result_text, reply_markup=main_menu_keyboard())
     
     seller_id = message.from_user.id
     set_seller_id(deal_id, seller_id)
@@ -798,7 +809,7 @@ async def gift_transferred(callback: CallbackQuery):
         f"Средства будут зачислены после подтверждения."
     )
     
-    await edit_or_send_with_photo(callback.message, gift_text)
+    await answer_callback_with_photo(callback, gift_text)
 
     for admin_id in ADMIN_IDS:
         try:
@@ -901,13 +912,13 @@ async def seller_confirm_receipt(callback: CallbackQuery):
             pass
 
     complete_text = "✅ Спасибо! Сделка завершена. Ожидайте перевода от администратора."
-    await edit_or_send_with_photo(callback.message, complete_text)
+    await answer_callback_with_photo(callback, complete_text)
 
 # ============== ОБРАБОТЧИКИ ДЛЯ КОШЕЛЬКОВ ==============
 @router.callback_query(F.data == "wallet_settings")
 async def wallet_settings(callback: CallbackQuery):
     wallet_text = "👛 Выберите способ оплаты:\n\nВы можете добавить или изменить ваши кошельки для получения платежей:"
-    await edit_or_send_with_photo(callback.message, wallet_text, wallet_menu_keyboard())
+    await answer_callback_with_photo(callback, wallet_text, wallet_menu_keyboard())
 
 @router.callback_query(F.data == "wallet_ton")
 async def add_ton_wallet(callback: CallbackQuery, state: FSMContext):
@@ -929,7 +940,20 @@ async def process_ton_wallet(message: Message, state: FSMContext):
         return
     
     update_ton_wallet(message.from_user.id, ton_wallet)
-    await message.answer(f"✅ TON кошелек успешно сохранен!\n\nАдрес: {ton_wallet}", reply_markup=wallet_menu_keyboard())
+    
+    # Отправляем результат с фото
+    if os.path.exists(BOT_PHOTO_PATH):
+        photo = FSInputFile(BOT_PHOTO_PATH)
+        await message.answer_photo(
+            photo=photo,
+            caption=f"✅ TON кошелек успешно сохранен!\n\nАдрес: {ton_wallet}",
+            reply_markup=wallet_menu_keyboard()
+        )
+    else:
+        await message.answer(
+            f"✅ TON кошелек успешно сохранен!\n\nАдрес: {ton_wallet}",
+            reply_markup=wallet_menu_keyboard()
+        )
     await state.clear()
 
 @router.callback_query(F.data == "wallet_usdt")
@@ -952,7 +976,20 @@ async def process_usdt_wallet(message: Message, state: FSMContext):
         return
     
     update_usdt_wallet(message.from_user.id, usdt_wallet)
-    await message.answer(f"✅ USDT кошелек успешно сохранен!\n\nАдрес: {usdt_wallet}", reply_markup=wallet_menu_keyboard())
+    
+    # Отправляем результат с фото
+    if os.path.exists(BOT_PHOTO_PATH):
+        photo = FSInputFile(BOT_PHOTO_PATH)
+        await message.answer_photo(
+            photo=photo,
+            caption=f"✅ USDT кошелек успешно сохранен!\n\nАдрес: {usdt_wallet}",
+            reply_markup=wallet_menu_keyboard()
+        )
+    else:
+        await message.answer(
+            f"✅ USDT кошелек успешно сохранен!\n\nАдрес: {usdt_wallet}",
+            reply_markup=wallet_menu_keyboard()
+        )
     await state.clear()
 
 @router.callback_query(F.data == "wallet_card")
@@ -998,14 +1035,23 @@ async def process_card_bank(message: Message, state: FSMContext):
     update_card_wallet(message.from_user.id, data['card_number'], data['card_holder'], card_bank)
     
     card_number_formatted = ' '.join([data['card_number'][i:i+4] for i in range(0, 16, 4)])
-    
-    await message.answer(
+    result_text = (
         f"✅ Банковская карта успешно сохранена!\n\n"
         f"💳 Номер: {card_number_formatted}\n"
         f"👤 Владелец: {data['card_holder']}\n"
-        f"🏦 Банк: {card_bank}",
-        reply_markup=wallet_menu_keyboard()
+        f"🏦 Банк: {card_bank}"
     )
+    
+    # Отправляем результат с фото
+    if os.path.exists(BOT_PHOTO_PATH):
+        photo = FSInputFile(BOT_PHOTO_PATH)
+        await message.answer_photo(
+            photo=photo,
+            caption=result_text,
+            reply_markup=wallet_menu_keyboard()
+        )
+    else:
+        await message.answer(result_text, reply_markup=wallet_menu_keyboard())
     await state.clear()
 
 # ============== ОБРАБОТЧИКИ ДЛЯ СБП ==============
@@ -1056,12 +1102,22 @@ async def process_sbp_name(message: Message, state: FSMContext):
     
     update_sbp_wallet(message.from_user.id, data['sbp_number'], sbp_name)
     
-    await message.answer(
+    result_text = (
         f"✅ СБП успешно сохранен!\n\n"
         f"📱 Номер: {data['sbp_number']}\n"
-        f"👤 Получатель: {sbp_name}",
-        reply_markup=wallet_menu_keyboard()
+        f"👤 Получатель: {sbp_name}"
     )
+    
+    # Отправляем результат с фото
+    if os.path.exists(BOT_PHOTO_PATH):
+        photo = FSInputFile(BOT_PHOTO_PATH)
+        await message.answer_photo(
+            photo=photo,
+            caption=result_text,
+            reply_markup=wallet_menu_keyboard()
+        )
+    else:
+        await message.answer(result_text, reply_markup=wallet_menu_keyboard())
     await state.clear()
 
 @router.callback_query(F.data == "wallet_stars")
@@ -1073,20 +1129,7 @@ async def stars_info(callback: CallbackQuery):
         "3. Звезды автоматически конвертируются в рубли\n\nКомиссия Telegram: 5%"
     )
     
-    try:
-        await callback.message.delete()
-    except:
-        pass
-    
-    if os.path.exists(BOT_PHOTO_PATH):
-        photo = FSInputFile(BOT_PHOTO_PATH)
-        await callback.message.answer_photo(
-            photo=photo,
-            caption=stars_text,
-            reply_markup=wallet_menu_keyboard()
-        )
-    else:
-        await callback.message.answer(stars_text, reply_markup=wallet_menu_keyboard())
+    await answer_callback_with_photo(callback, stars_text, wallet_menu_keyboard())
 
 @router.callback_query(F.data.startswith("view_"))
 async def view_wallet(callback: CallbackQuery):
@@ -1094,23 +1137,11 @@ async def view_wallet(callback: CallbackQuery):
     wallets = get_user_wallets(callback.from_user.id)
     
     if not wallets or all(v is None for v in wallets[1:]):
-        try:
-            await callback.message.delete()
-        except:
-            pass
-        
-        if os.path.exists(BOT_PHOTO_PATH):
-            photo = FSInputFile(BOT_PHOTO_PATH)
-            await callback.message.answer_photo(
-                photo=photo,
-                caption="❌ У вас пока нет сохраненных кошельков.",
-                reply_markup=wallet_menu_keyboard()
-            )
-        else:
-            await callback.message.answer(
-                "❌ У вас пока нет сохраненных кошельков.",
-                reply_markup=wallet_menu_keyboard()
-            )
+        await answer_callback_with_photo(
+            callback,
+            "❌ У вас пока нет сохраненных кошельков.",
+            wallet_menu_keyboard()
+        )
         return
     
     text = ""
@@ -1128,20 +1159,7 @@ async def view_wallet(callback: CallbackQuery):
     else:
         text = f"❌ {wallet_type.upper()} кошелек не добавлен."
     
-    try:
-        await callback.message.delete()
-    except:
-        pass
-    
-    if os.path.exists(BOT_PHOTO_PATH):
-        photo = FSInputFile(BOT_PHOTO_PATH)
-        await callback.message.answer_photo(
-            photo=photo,
-            caption=text,
-            reply_markup=wallet_view_keyboard()
-        )
-    else:
-        await callback.message.answer(text, reply_markup=wallet_view_keyboard())
+    await answer_callback_with_photo(callback, text, wallet_view_keyboard())
 
 # ============== АДМИН ПАНЕЛЬ ==============
 @router.callback_query(F.data == "admin_active_deals")
@@ -1152,19 +1170,7 @@ async def admin_active_deals(callback: CallbackQuery):
 
     deals = get_active_deals()
     if not deals:
-        try:
-            await callback.message.delete()
-        except:
-            pass
-        
-        if os.path.exists(BOT_PHOTO_PATH):
-            photo = FSInputFile(BOT_PHOTO_PATH)
-            await callback.message.answer_photo(
-                photo=photo,
-                caption="📭 Нет активных сделок."
-            )
-        else:
-            await callback.message.answer("📭 Нет активных сделок.")
+        await answer_callback_with_photo(callback, "📭 Нет активных сделок.")
         return
 
     text = "📋 Активные сделки:\n\n"
@@ -1183,19 +1189,7 @@ async def admin_active_deals(callback: CallbackQuery):
         text += f"   Покупатель: {deal[2]}\n"
         text += f"   Продавец: {deal[3]}\n\n"
 
-    try:
-        await callback.message.delete()
-    except:
-        pass
-    
-    if os.path.exists(BOT_PHOTO_PATH):
-        photo = FSInputFile(BOT_PHOTO_PATH)
-        await callback.message.answer_photo(
-            photo=photo,
-            caption=text
-        )
-    else:
-        await callback.message.answer(text)
+    await answer_callback_with_photo(callback, text)
 
 @router.callback_query(F.data == "admin_history")
 async def admin_history(callback: CallbackQuery):
@@ -1205,19 +1199,7 @@ async def admin_history(callback: CallbackQuery):
 
     deals = get_all_deals()
     if not deals:
-        try:
-            await callback.message.delete()
-        except:
-            pass
-        
-        if os.path.exists(BOT_PHOTO_PATH):
-            photo = FSInputFile(BOT_PHOTO_PATH)
-            await callback.message.answer_photo(
-                photo=photo,
-                caption="📭 История сделок пуста."
-            )
-        else:
-            await callback.message.answer("📭 История сделок пуста.")
+        await answer_callback_with_photo(callback, "📭 История сделок пуста.")
         return
 
     text = "📜 История всех сделок:\n\n"
@@ -1228,16 +1210,4 @@ async def admin_history(callback: CallbackQuery):
         text += f"   Статус: {deal[9]}\n"
         text += f"   Дата: {deal[0]}\n\n"
 
-    try:
-        await callback.message.delete()
-    except:
-        pass
-    
-    if os.path.exists(BOT_PHOTO_PATH):
-        photo = FSInputFile(BOT_PHOTO_PATH)
-        await callback.message.answer_photo(
-            photo=photo,
-            caption=text
-        )
-    else:
-        await callback.message.answer(text)
+    await answer_callback_with_photo(callback, text)
