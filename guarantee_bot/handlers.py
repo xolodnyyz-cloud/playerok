@@ -1,6 +1,3 @@
-Вот **ПОЛНЫЙ ИСПРАВЛЕННЫЙ** файл `handlers.py`:
-
-```python
 from aiogram import Router, F, types
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, FSInputFile
 from aiogram.filters import Command, CommandStart
