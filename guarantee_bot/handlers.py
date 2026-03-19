@@ -107,7 +107,7 @@ def gift_transferred_keyboard(deal_id):
 async def send_message_with_photo_target(target, text, reply_markup=None, photo_path=None):
     """
     Универсальная функция для отправки сообщения с фото
-    target может быть: Message, CallbackQuery, chat_id
+    target может быть: Message, CallbackQuery
     """
     try:
         # Определяем, куда отправлять
@@ -118,15 +118,13 @@ async def send_message_with_photo_target(target, text, reply_markup=None, photo_
             except:
                 pass
             message_target = target.message
-            bot = target.bot
         elif isinstance(target, Message):
-            # Это просто сообщение
+            # Это просто сообщение - не удаляем, просто отправляем новое
             message_target = target
-            bot = target.bot
         else:
-            # Это chat_id
-            bot = target  # нужно передавать bot отдельно
-            return await send_with_photo_by_chat_id(bot, target, text, reply_markup, photo_path)
+            # Неизвестный тип
+            print(f"Неизвестный тип target: {type(target)}")
+            return
         
         # Отправляем с фото или без
         photo_path = photo_path or BOT_PHOTO_PATH
@@ -407,12 +405,16 @@ async def fast_buy(message: Message):
     
     update_deal_status(deal_id, "payment_confirmed")
     
-    await message.answer(
+    # Отправляем сообщение об успешной оплате с фото
+    success_text = (
         f"✅ Оплата подтверждена для сделки #{deal_id}!\n\n"
         f"💳 С вашего аккаунта списано: {amount} {currency_symbol} {currency_text}\n"
         f"💰 Сумма сделки: {amount} {currency_symbol} {currency_text}\n\n"
         f"Продавец уже получил уведомление."
     )
+    
+    # Используем функцию для отправки с фото
+    await send_message_with_photo_target(message, success_text)
 
     if seller_id:
         try:
